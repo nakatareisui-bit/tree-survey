@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>立木調査 位置記録</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --paper:#F2F3EE;
+    --paper-dim:#E7E8E0;
+    --ink:#1E2420;
+    --ink-soft:#5B6259;
+    --line:#C9CDBF;
+    --orange:#E8600C;
+    --orange-dark:#C24E08;
+    --green:#3F5D3A;
+    --white:#FFFFFF;
+    --danger:#B23A2E;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--paper);
+    font-family:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",system-ui,-apple-system,sans-serif;
+    color:var(--ink);}
+  .mono{font-family:"SFMono-Regular","JetBrains Mono",Menlo,Consolas,monospace; letter-spacing:0.01em;}
+
+  #app{display:flex; flex-direction:column; height:100vh; height:100dvh;}
+
+  header{
+    padding:12px 14px 10px;
+    background:var(--white);
+    border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  header h1{font-size:15px; margin:0; font-weight:700; letter-spacing:0.02em;}
+  header .count{font-size:12px; color:var(--ink-soft);}
+
+  .settings{
+    display:flex; gap:8px; padding:10px 14px; background:var(--paper-dim);
+    border-bottom:1px solid var(--line); align-items:center; flex-wrap:wrap;
+  }
+  .settings label{font-size:11px; color:var(--ink-soft); display:block; margin-bottom:2px;}
+  .settings input{
+    width:64px; padding:6px 8px; border:1px solid var(--line); border-radius:4px;
+    font-size:14px; background:var(--white); color:var(--ink);
+  }
+  .settings .field{display:flex; flex-direction:column;}
+  .settings .next{margin-left:auto; text-align:right;}
+  .settings .next .lbl{font-size:11px; color:var(--ink-soft);}
+  .settings .next .val{font-size:18px; font-weight:700; color:var(--orange-dark);}
+
+  #settingsToggle{
+    flex:0 0 auto;
+    padding:9px 14px;
+    background:var(--paper-dim);
+    border-bottom:1px solid var(--line);
+    font-size:13px;
+    font-weight:700;
+    cursor:pointer;
+    user-select:none;
+    text-align:left;
+    display:flex; align-items:center; gap:4px;
+  }
+  #settingsToggle:active{background:var(--paper);}
+  #settingsToggle #settingsSummary{
+    font-weight:400; color:var(--ink-soft); font-size:12px; margin-left:2px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto;
+  }
+  #settingsPanel.collapsed{display:none !important;}
+
+  #map{flex:1 1 auto; min-height:180px; background:#dfe3da;}
+
+  .capture-wrap{
+    position:relative;
+  }
+  #captureBtn{
+    position:absolute; right:14px; bottom:16px; left:auto; transform:none;
+    z-index:500;
+    width:84px; height:84px; border-radius:50%;
+    background:var(--orange); color:var(--white);
+    border:4px solid var(--white);
+    box-shadow:0 3px 10px rgba(0,0,0,0.35);
+    font-size:12px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; text-align:center; line-height:1.2;
+    cursor:pointer; user-select:none;
+    transition:transform 0.08s ease, background 0.15s ease;
+  }
+  #captureBtn:active{transform:scale(0.94); background:var(--orange-dark);}
+  #captureBtn.flash{background:var(--green);}
+
+  #statusBar{
+    font-size:11px; padding:6px 14px; color:var(--ink-soft); background:var(--white);
+    border-bottom:1px solid var(--line); min-height:16px;
+  }
+  #statusBar.error{color:var(--danger);}
+
+  #list{
+    flex:0 0 auto; max-height:34vh; overflow-y:auto; background:var(--white);
+    border-top:1px solid var(--line);
+  }
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{
+    position:sticky; top:0; background:var(--paper-dim); text-align:left;
+    padding:6px 8px; font-size:11px; color:var(--ink-soft); font-weight:600;
+    border-bottom:1px solid var(--line);
+  }
+  td{padding:6px 8px; border-bottom:1px solid var(--paper-dim); vertical-align:middle;}
+  td.num{font-weight:700; color:var(--orange-dark); white-space:nowrap;}
+  td.coords{color:var(--ink-soft); font-size:12px;}
+  .label-input{
+    width:56px; border:1px solid transparent; background:transparent; font-weight:700;
+    color:var(--orange-dark); padding:2px 4px; border-radius:3px; font-size:13px;
+    font-family:inherit;
+  }
+  .label-input:focus{border-color:var(--line); background:var(--paper);}
+  .del-btn{
+    background:none; border:none; color:var(--ink-soft); font-size:16px; cursor:pointer; padding:2px 6px;
+  }
+  .del-btn:active{color:var(--danger);}
+  .empty-row td{text-align:center; color:var(--ink-soft); padding:16px 8px; font-size:12px;}
+
+  footer{
+    display:flex; gap:8px; padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    background:var(--paper-dim); border-top:1px solid var(--line);
+  }
+  footer button{
+    flex:1; padding:11px 8px; border-radius:6px; border:1px solid var(--line);
+    background:var(--white); color:var(--ink); font-size:13px; font-weight:700; cursor:pointer;
+  }
+  footer button:active{background:var(--paper);}
+  footer button.primary{background:var(--green); color:var(--white); border-color:var(--green);}
+
+  .note{
+    font-size:10.5px; color:var(--ink-soft); text-align:center; padding:4px 14px 8px; background:var(--paper-dim);
+  }
+
+  .leaflet-div-icon{background:none; border:none;}
+
+  .leaflet-control-layers{
+    border-radius:8px !important;
+    border:1px solid var(--line) !important;
+    box-shadow:0 3px 10px rgba(0,0,0,0.25) !important;
+    font-family:"Zen Kaku Gothic New","Hiragino Sans",sans-serif;
+  }
+  .leaflet-control-layers-toggle{
+    width:38px !important; height:38px !important;
+  }
+  .leaflet-control-layers-expanded{
+    padding:8px 10px !important;
+    font-size:13px !important;
+  }
+  .leaflet-control-layers-selector{
+    margin-right:6px;
+  }
+  .leaflet-control-zoom{
+    border-radius:8px !important;
+    overflow:hidden;
+    box-shadow:0 3px 10px rgba(0,0,0,0.25) !important;
+    margin-bottom:16px !important;
+  }
+  .leaflet-control-zoom a{
+    width:38px !important; height:38px !important; line-height:38px !important;
+    font-size:18px !important;
+  }
+  .pin{
+    width:30px; height:30px; border-radius:50% 50% 50% 0; transform:rotate(-45deg);
+    background:var(--orange); border:2px solid var(--white); box-shadow:0 1px 4px rgba(0,0,0,0.4);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pin span{
+    transform:rotate(45deg); color:var(--white); font-size:9px; font-weight:800;
+    font-family:"SFMono-Regular",monospace; white-space:nowrap;
+  }
+
+    /* iPhone / mobile optimization */
+    html, body { -webkit-text-size-adjust: 100%; }
+    button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    .site-field { flex: 1.8 1 220px; }
+    .site-field input { width: 100%; box-sizing: border-box; }
+    .ios-note {
+      margin: 8px 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #f5f5f5;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+  .settings select{
+    width:78px;
+    padding:6px 8px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    font-size:14px;
+    background:var(--white);
+    color:var(--ink);
+  }
+  #currentPosBar{
+    font-size:11px;
+    padding:6px 14px;
+    color:var(--ink-soft);
+    background:var(--white);
+    border-bottom:1px solid var(--line);
+    min-height:16px;
+  }
+
+  /* iPhone表示のレイアウト安定化 */
+  #app{
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+    height:100dvh;
+    min-height:0;
+    overflow:hidden;
+  }
+  .settings{
+    flex:0 0 auto;
+  }
+  #statusBar,
+  #currentPosBar{
+    flex:0 0 auto;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .capture-wrap{
+    position:relative;
+    flex:1 1 0 !important;
+    min-height:220px !important;
+    overflow:hidden !important;
+  }
+  #map{
+    flex:1 1 0 !important;
+    width:100% !important;
+    height:100% !important;
+    min-height:0 !important;
+  }
+  #list{
+    flex:0 0 auto !important;
+    max-height:24dvh !important;
+    overflow-y:auto;
+    position:relative;
+    z-index:10;
+  }
+  footer{
+    flex:0 0 auto;
+  }
+  .note{
+    flex:0 0 auto;
+    max-height:54px;
+    overflow:hidden;
+  }
+
+  /* 画面が狭いiPhoneでも入力欄がはみ出さない */
+  @media (max-width:430px){
+    header{padding:11px 12px 9px;}
+    header h1{font-size:15px;}
+    .settings{gap:7px; padding:9px 10px;}
+    .site-field{flex:1 1 100% !important; min-width:0;}
+    .settings .field{flex:0 0 auto;}
+    .settings input{width:72px;}
+    .settings select{width:86px;}
+    .settings .next{margin-left:auto;}
+    .settings .next .val{font-size:19px;}
+    #statusBar,#currentPosBar{font-size:10.5px; padding:6px 10px;}
+    #captureBtn{
+      right:10px !important;
+      bottom:10px !important;
+      width:78px !important;
+      height:78px !important;
+      font-size:11px !important;
+    }
+    #list{max-height:23dvh !important;}
+    footer{gap:6px; padding:8px 10px calc(8px + env(safe-area-inset-bottom));}
+    footer button{font-size:12px; padding:10px 4px;}
+    .note{font-size:10px; padding:4px 10px 7px;}
+  }
+
+
+  /* 記録一覧の開閉 */
+  #listToggle{
+    flex:0 0 auto;
+    padding:9px 14px;
+    background:var(--paper-dim);
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    font-size:13px;
+    font-weight:700;
+    cursor:pointer;
+    user-select:none;
+    text-align:left;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  #listToggle:active{background:var(--paper);}
+  #listToggleLabel{flex:1 1 auto;}
+  #clearAllBtn{
+    flex:0 0 auto;
+    background:var(--white);
+    color:var(--danger);
+    border:1px solid var(--danger);
+    border-radius:6px;
+    padding:6px 10px;
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  #clearAllBtn:active{background:var(--danger); color:var(--white);}
+  #list.collapsed{display:none !important;}
+
+  /* 記録一覧を画面いっぱいに表示するモード */
+  #app.list-fullscreen .capture-wrap{display:none !important;}
+  #app.list-fullscreen #statusBar{display:none !important;}
+  #app.list-fullscreen #currentPosBar{display:none !important;}
+  #app.list-fullscreen #settingsToggle{display:none !important;}
+  #app.list-fullscreen #settingsPanel{display:none !important;}
+  #app.list-fullscreen #list{
+    flex:1 1 auto !important;
+    max-height:none !important;
+  }
+
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>立木調査 位置記録</h1>
+    <div class="count mono"><span id="countText">0件</span></div>
+  </header>
+
+  <div id="settingsToggle" role="button" aria-expanded="false">
+    ⚙️ 設定　<span id="settingsSummary">現場未設定 ・ 次:A1 ・ 第8系</span> ▼
+  </div>
+  <div id="settingsPanel" class="settings collapsed">
+    <div class="field site-field">
+      <label for="siteNameInput">現場名</label>
+      <input id="siteNameInput" type="text" value="" maxlength="40" placeholder="現場名を入力">
+    </div>
+    <div class="field">
+      <label for="prefixInput">接頭辞</label>
+      <input id="prefixInput" type="text" value="A" maxlength="4">
+    </div>
+    <div class="field">
+      <label for="numInput">次の番号</label>
+      <input id="numInput" type="number" value="1" min="1">
+    </div>
+    <div class="field">
+      <label for="coordSystem">座標系</label>
+      <select id="coordSystem">
+        <option value="7">第7系</option>
+        <option value="8" selected>第8系</option>
+        <option value="9">第9系</option>
+      </select>
+    </div>
+    <div class="next">
+      <div class="lbl">記録すると付く番号</div>
+      <div class="val mono" id="nextLabelPreview">A1</div>
+    </div>
+  </div>
+
+  <div id="statusBar">準備完了。ボタンを押すと現在地を記録します。</div>
+
+  <div id="currentPosBar">📍 現在位置：未取得</div>
+
+  <div class="capture-wrap" style="flex:1 1 auto; display:flex; min-height:0;">
+    <div id="map" style="flex:1 1 auto;"></div>
+    <div id="captureBtn">現在地を<br>記録</div>
+  </div>
+
+  <div id="listToggle" role="button" aria-expanded="false">
+    <span id="listToggleLabel">📋 記録一覧　<span id="listToggleCount">0件</span> ▼</span>
+    <button id="clearAllBtn" type="button">🗑 全削除</button>
+  </div>
+  <div id="list" class="collapsed">
+    <table>
+      <thead>
+        <tr><th style="width:52px;">番号</th><th>緯度・経度（精度）</th><th style="width:34px;"></th></tr>
+      </thead>
+      <tbody id="pointsBody">
+        <tr class="empty-row"><td colspan="3">まだ記録がありません</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    <button id="csvBtn">CSV書き出し</button>
+    <button id="kmlBtn" class="primary">KML書き出し</button>
+    <button id="kmlImportBtn">KML読込</button>
+    <input id="kmlFileInput" type="file" accept=".kml,application/vnd.google-earth.kml+xml,text/xml,application/xml" style="display:none;">
+  </footer>
+  <div class="note">記録はiPhone内に自動保存されます。KML読込で過去の位置を地図に復元できます。地図を長押しすると手動でも位置を追加できます。</div>
+
+</div>
+
+<script>
+(function(){
+  var points = []; // {id, label, lat, lon, acc, ts, marker}
+
+    function savePoints(){
+      try{
+        var data = points.map(function(p){
+          return {id:p.id, label:p.label, lat:p.lat, lon:p.lon, acc:p.acc, ts:p.ts.toISOString()};
+        });
+        localStorage.setItem('treeSurveyPoints', JSON.stringify(data));
+      }catch(e){}
+    }
+
+    function loadPoints(){
+      try{
+        var raw = localStorage.getItem('treeSurveyPoints');
+        if(!raw) return;
+        var data = JSON.parse(raw);
+        if(!Array.isArray(data)) return;
+        data.forEach(function(p){
+          p.ts = new Date(p.ts);
+          p.marker = null;
+          points.push(p);
+        });
+      }catch(e){}
+    }
+
+  var nextId = 1;
+
+  var siteNameInput = document.getElementById('siteNameInput');
+  var prefixInput = document.getElementById('prefixInput');
+  var numInput = document.getElementById('numInput');
+  var nextLabelPreview = document.getElementById('nextLabelPreview');
+  var captureBtn = document.getElementById('captureBtn');
+  var statusBar = document.getElementById('statusBar');
+  var pointsBody = document.getElementById('pointsBody');
+  var countText = document.getElementById('countText');
+
+  // 現場名を保存・復元
+  try {
+    siteNameInput.value = localStorage.getItem('treeSurveySiteName') || '';
+    siteNameInput.addEventListener('input', function(){
+      try { localStorage.setItem('treeSurveySiteName', siteNameInput.value); } catch(e) {}
+      if(typeof updateSettingsSummary === 'function') updateSettingsSummary();
+    });
+  } catch(e) {}
+
+  function updatePreview(){
+    nextLabelPreview.textContent = (prefixInput.value || '') + (numInput.value || '');
+    updateSettingsSummary();
+  }
+  prefixInput.addEventListener('input', updatePreview);
+  numInput.addEventListener('input', updatePreview);
+  updatePreview();
+
+  // 設定パネルの開閉
+  var settingsToggle = document.getElementById('settingsToggle');
+  var settingsPanel = document.getElementById('settingsPanel');
+
+  function updateSettingsSummary(){
+    var summaryEl = document.getElementById('settingsSummary');
+    if(!summaryEl) return;
+    var site = (siteNameInput.value || '').trim() || '現場未設定';
+    var label = (prefixInput.value || '') + (numInput.value || '');
+    var zoneEl = document.getElementById('coordSystem');
+    var zoneText = zoneEl ? ('第' + zoneEl.value + '系') : '';
+    summaryEl.textContent = site + ' ・ 次:' + label + ' ・ ' + zoneText;
+  }
+
+  if(settingsToggle && settingsPanel){
+    settingsToggle.addEventListener('click', function(){
+      var collapsed = settingsPanel.classList.toggle('collapsed');
+      settingsToggle.setAttribute('aria-expanded', String(!collapsed));
+      settingsToggle.innerHTML = '⚙️ 設定　<span id="settingsSummary"></span> ' + (collapsed ? '▼' : '▲');
+      updateSettingsSummary();
+      setTimeout(function(){ if(map && map.invalidateSize) map.invalidateSize(true); }, 260);
+    });
+  }
+  updateSettingsSummary();
+
+
+  // 平面直角座標系 第7・8・9系
+  var planeOrigins = {
+    "7": {lat:36.000000000000, lon:137.166666666667},
+    "8": {lat:36.000000000000, lon:138.500000000000},
+    "9": {lat:36.000000000000, lon:139.833333333333}
+  };
+
+  function latLonToPlaneRectangular(latDeg, lonDeg, zone){
+    var o = planeOrigins[String(zone)];
+    var a = 6378137.0;
+    var f = 1 / 298.257222101;
+    var e2 = 2*f - f*f;
+    var ep2 = e2/(1-e2);
+    var k0 = 0.9999;
+    var lat = latDeg*Math.PI/180;
+    var lon = lonDeg*Math.PI/180;
+    var lat0 = o.lat*Math.PI/180;
+    var lon0 = o.lon*Math.PI/180;
+    var sinLat=Math.sin(lat), cosLat=Math.cos(lat), tanLat=Math.tan(lat);
+    var N=a/Math.sqrt(1-e2*sinLat*sinLat);
+    var T=tanLat*tanLat, C=ep2*cosLat*cosLat;
+    var A=(lon-lon0)*cosLat;
+    var e4=e2*e2, e6=e4*e2;
+    function M(phi){
+      return a*((1-e2/4-3*e4/64-5*e6/256)*phi
+        -(3*e2/8+3*e4/32+45*e6/1024)*Math.sin(2*phi)
+        +(15*e4/256+45*e6/1024)*Math.sin(4*phi)
+        -(35*e6/3072)*Math.sin(6*phi));
+    }
+    var m=M(lat), m0=M(lat0);
+    var x=k0*(m-m0+N*tanLat*(A*A/2+
+      (5-T+9*C+4*C*C)*Math.pow(A,4)/24+
+      (61-58*T+T*T+600*C-330*ep2)*Math.pow(A,6)/720));
+    var y=k0*N*(A+(1-T+C)*Math.pow(A,3)/6+
+      (5-18*T+T*T+72*C-58*ep2)*Math.pow(A,5)/120);
+    return {x:x,y:y};
+  }
+  function getCoordSystem(){
+    var el=document.getElementById('coordSystem');
+    return el ? el.value : '8';
+  }
+  function updateCurrentPositionBar(lat,lon,acc){
+    var el=document.getElementById('currentPosBar');
+    if(el) el.textContent='📍 現在位置：緯度 '+lat.toFixed(7)+' / 経度 '+lon.toFixed(7)+' / 精度 ±'+Math.round(acc||0)+'m';
+  }
+
+
+  var coordSystem = document.getElementById('coordSystem');
+  if(coordSystem){
+    try { coordSystem.value = localStorage.getItem('treeSurveyCoordSystem') || '8'; } catch(e) {}
+    coordSystem.addEventListener('change', function(){
+      try { localStorage.setItem('treeSurveyCoordSystem', coordSystem.value); } catch(e) {}
+      if(typeof updateSettingsSummary === 'function') updateSettingsSummary();
+    });
+  }
+  updateSettingsSummary();
+
+  // Map setup, default center near Nagano
+  var map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([36.6513, 138.1810], 17);
+  L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+  var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 22,
+    maxNativeZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  });
+
+  var gsiStdLayer = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+    maxZoom: 22,
+    maxNativeZoom: 18,
+    attribution: '地理院タイル（国土地理院）'
+  });
+
+  var gsiPhotoLayer = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
+    maxZoom: 22,
+    maxNativeZoom: 18,
+    attribution: '地理院タイル（国土地理院）'
+  });
+
+  osmLayer.addTo(map);
+
+  L.control.layers({
+    'OpenStreetMap': osmLayer,
+    '国土地理院地図': gsiStdLayer,
+    '航空写真': gsiPhotoLayer
+  }, null, { position: 'topright', collapsed: true }).addTo(map);
+
+  // 保存済みデータを復元して地図上にも表示
+  loadPoints();
+  if(points.length){
+    points.forEach(function(p){
+      p.marker = L.marker([p.lat, p.lon], { icon: makeIcon(p.label) }).addTo(map);
+      p.marker.bindPopup(p.label + '<br>' + p.lat.toFixed(6) + ', ' + p.lon.toFixed(6));
+    });
+    nextId = Math.max.apply(null, points.map(function(p){ return Number(p.id) || 0; })) + 1;
+  }
+
+  var haveCentered = false;
+
+  // 地図を長押し（タップ&ホールド）で手動ポイント追加（GPSが入りにくい場所向け）
+  var pressTimer = null;
+  map.on('mousedown', function(e){
+    pressTimer = setTimeout(function(){ addManualPoint(e.latlng.lat, e.latlng.lng); }, 600);
+  });
+  map.on('mouseup dragstart', function(){ clearTimeout(pressTimer); });
+  map.on('touchstart', function(e){
+    if(!e.latlng) return;
+    pressTimer = setTimeout(function(){ addManualPoint(e.latlng.lat, e.latlng.lng); }, 600);
+  });
+  map.on('touchend touchmove', function(){ clearTimeout(pressTimer); });
+
+  function addManualPoint(lat, lon){
+    if(!window.confirm('この位置に手動でポイントを追加しますか？\n（GPS未取得時の補助用）')) return;
+    var label = (prefixInput.value || '') + (numInput.value || '');
+    var id = nextId++;
+    var marker = L.marker([lat, lon], { icon: makeIcon(label) }).addTo(map);
+    marker.bindPopup(label + '<br>' + lat.toFixed(6) + ', ' + lon.toFixed(6) + '<br>手動指定');
+    points.push({ id: id, label: label, lat: lat, lon: lon, acc: 0, ts: new Date(), marker: marker });
+    var n = parseInt(numInput.value, 10);
+    numInput.value = isNaN(n) ? 1 : n + 1;
+    updatePreview();
+    renderList();
+    savePoints();
+    setStatus('手動で記録しました： ' + label + '（地図タップ指定）');
+  }
+
+  function makeIcon(label){
+    return L.divIcon({
+      className: 'leaflet-div-icon',
+      html: '<div class="pin"><span>' + escapeHtml(label) + '</span></div>',
+      iconSize: [30,30],
+      iconAnchor: [15,29],
+      popupAnchor: [0,-28]
+    });
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function setStatus(msg, isError){
+    statusBar.textContent = msg;
+    statusBar.className = isError ? 'error' : '';
+  }
+
+
+  var list = document.getElementById('list');
+  var listToggle = document.getElementById('listToggle');
+  var listToggleLabel = document.getElementById('listToggleLabel');
+  var clearAllBtn = document.getElementById('clearAllBtn');
+  var appEl = document.getElementById('app');
+
+  function updateListToggle(){
+    if(!listToggleLabel) return;
+    var expanded = appEl.classList.contains('list-fullscreen');
+    listToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    listToggleLabel.textContent = expanded
+      ? '🗺 地図に戻る'
+      : ('📋 記録一覧　' + points.length + '件 ▼');
+  }
+
+  if(listToggle){
+    listToggle.addEventListener('click', function(){
+      var expanding = !appEl.classList.contains('list-fullscreen');
+      appEl.classList.toggle('list-fullscreen', expanding);
+      list.classList.toggle('collapsed', !expanding);
+      updateListToggle();
+      setTimeout(function(){
+        if(map && map.invalidateSize) map.invalidateSize(true);
+      }, 260);
+    });
+  }
+
+  function clearAllPoints(){
+    if(points.length === 0){
+      setStatus('削除する記録がありません。');
+      return;
+    }
+    var ok = window.confirm('記録した ' + points.length + ' 件をすべて削除します。よろしいですか？');
+    if(!ok) return;
+    points.forEach(function(p){
+      if(p.marker){ map.removeLayer(p.marker); }
+    });
+    points = [];
+    try { localStorage.removeItem('treeSurveyPoints'); } catch(e) {}
+    numInput.value = 1;
+    updatePreview();
+    renderList();
+    setStatus('記録をすべて削除しました。');
+  }
+
+  if(clearAllBtn){
+    clearAllBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      clearAllPoints();
+    });
+  }
+
+  if(siteNameInput){
+    siteNameInput.addEventListener('change', function(){
+      if(points.length === 0) return;
+      var ok = window.confirm(
+        '現場名が変更されました。前の現場の記録（' + points.length + '件）を削除しますか？\n' +
+        '（「キャンセル」を選ぶと記録はそのまま残ります）'
+      );
+      if(ok) clearAllPoints();
+    });
+  }
+
+  function renderList(){
+    if(points.length === 0){
+      pointsBody.innerHTML = '<tr class="empty-row"><td colspan="3">まだ記録がありません</td></tr>';
+    } else {
+      pointsBody.innerHTML = '';
+      points.forEach(function(p){
+        var tr = document.createElement('tr');
+
+        var tdNum = document.createElement('td');
+        tdNum.className = 'num';
+        var labelInput = document.createElement('input');
+        labelInput.className = 'label-input';
+        labelInput.value = p.label;
+        labelInput.addEventListener('change', function(){
+          p.label = labelInput.value;
+          if(p.marker){ p.marker.setIcon(makeIcon(p.label)); }
+          savePoints();
+        });
+        tdNum.appendChild(labelInput);
+
+        var tdCoords = document.createElement('td');
+        tdCoords.className = 'coords mono';
+        tdCoords.textContent = p.lat.toFixed(6) + ', ' + p.lon.toFixed(6) +
+          (p.acc ? '  (±' + Math.round(p.acc) + 'm)' : '');
+
+        var tdDel = document.createElement('td');
+        var delBtn = document.createElement('button');
+        delBtn.className = 'del-btn';
+        delBtn.textContent = '削除';
+        delBtn.addEventListener('click', function(){
+          if(!window.confirm(p.label + ' を削除します。よろしいですか？')) return;
+          if(p.marker){ map.removeLayer(p.marker); }
+          points = points.filter(function(x){ return x.id !== p.id; });
+          savePoints();
+          updateListToggle();
+  renderList();
+        });
+        tdDel.appendChild(delBtn);
+
+        tr.appendChild(tdNum);
+        tr.appendChild(tdCoords);
+        tr.appendChild(tdDel);
+        pointsBody.appendChild(tr);
+      });
+    }
+    countText.textContent = points.length + '件';
+    updateListToggle();
+  }
+
+  // iPhone Safari向けGPS取得
+  function getCurrentPositionIOS(success, fail){
+    if(!window.isSecureContext){
+      fail({code: 1, message: '位置情報はHTTPSのページで利用してください。'});
+      return;
+    }
+    if(!navigator.geolocation){
+      fail({code: 2, message: 'この端末では位置情報を利用できません。'});
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      success,
+      fail,
+      {
+        enableHighAccuracy: true,
+        timeout: 30000,
+        maximumAge: 0
+      }
+    );
+  }
+
+
+  var currentPosMarker = null;
+  var currentPosCircle = null;
+
+  function showCurrentPosition(lat, lon, acc){
+    var bar = document.getElementById('currentPosBar');
+    if(bar){
+      bar.textContent =
+        '📍 現在位置：緯度 ' + lat.toFixed(7) +
+        ' / 経度 ' + lon.toFixed(7) +
+        ' / GPS精度 ±' + Math.round(acc || 0) + 'm';
+    }
+
+    if(currentPosMarker){
+      currentPosMarker.setLatLng([lat, lon]);
+    }else{
+      currentPosMarker = L.circleMarker([lat, lon], {
+        radius: 8,
+        weight: 3,
+        fillOpacity: 1
+      }).addTo(map);
+      currentPosMarker.bindTooltip('現在位置');
+    }
+
+    if(currentPosCircle){
+      currentPosCircle.setLatLng([lat, lon]);
+      currentPosCircle.setRadius(acc || 0);
+    }else{
+      currentPosCircle = L.circle([lat, lon], {
+        radius: acc || 0,
+        weight: 1,
+        fillOpacity: 0.08
+      }).addTo(map);
+    }
+  }
+
+  // iPhoneでページがバックグラウンドになった場合の注意
+  document.addEventListener('visibilitychange', function(){
+    var note = document.getElementById('iosNote');
+    if(!note) return;
+    if(document.hidden){
+      note.textContent = 'このページを閉じたり別アプリへ移動するとGPS更新が止まる場合があります。調査中はこのページを前面にしてください。';
+    } else {
+      note.textContent = '位置情報を取得するには、iPhoneの位置情報許可をONにしてください。';
+    }
+  });
+
+  captureBtn.addEventListener('click', function(){
+    if(!navigator.geolocation){
+      setStatus('この端末・ブラウザでは位置情報を取得できません。', true);
+      return;
+    }
+    setStatus('現在地を取得中…');
+    captureBtn.textContent = '取得中…';
+
+    getCurrentPositionIOS(function(pos){
+      var lat = pos.coords.latitude;
+      var lon = pos.coords.longitude;
+      var acc = pos.coords.accuracy;
+      showCurrentPosition(lat, lon, acc);
+      updateCurrentPositionBar(lat, lon, acc);
+
+      var label = (prefixInput.value || '') + (numInput.value || '');
+      var id = nextId++;
+
+      var marker = L.marker([lat, lon], { icon: makeIcon(label) }).addTo(map);
+      marker.bindPopup(label + '<br>' + lat.toFixed(6) + ', ' + lon.toFixed(6));
+
+      points.push({ id: id, label: label, lat: lat, lon: lon, acc: acc, ts: new Date(), marker: marker });
+
+      map.setView([lat, lon], Math.max(map.getZoom(), 20), {animate:true});
+      haveCentered = true;
+      setTimeout(function(){ map.invalidateSize(true); }, 250);
+
+      var n = parseInt(numInput.value, 10);
+      numInput.value = isNaN(n) ? 1 : n + 1;
+      updatePreview();
+
+      renderList();
+      savePoints();
+
+      if(acc && acc > 20){
+        setStatus('記録しました： ' + label + '（精度 ±' + Math.round(acc) + 'm　※精度が低めです。屋外の開けた場所で再取得も検討してください）', true);
+      } else {
+        setStatus('記録しました： ' + label + '（精度 ±' + Math.round(acc) + 'm）');
+      }
+
+      captureBtn.textContent = '現在地を\n記録';
+      captureBtn.classList.add('flash');
+      setTimeout(function(){ captureBtn.classList.remove('flash'); }, 350);
+
+    }, function(err){
+      var msg = '位置情報の取得に失敗しました。';
+      if(err && err.code === 1) msg = '位置情報の利用が許可されていません。Safariの設定を確認してください。';
+      else if(err && err.code === 2) msg = '位置情報を取得できませんでした。屋外など電波の良い場所で再試行してください。';
+      else if(err && err.code === 3) msg = '位置情報の取得がタイムアウトしました。もう一度お試しください。';
+      setStatus(msg, true);
+      captureBtn.textContent = '現在地を\n記録';
+    });
+  });
+
+  function downloadFile(filename, content, mime){
+    var blob = new Blob([content], { type: mime });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
+  document.getElementById('csvBtn').addEventListener('click', function(){
+      if(points.length === 0){ setStatus('書き出す記録がありません。', true); return; }
+
+      var zone = getCoordSystem();
+      var rows = ['現場名,番号,緯度,経度,X座標(m),Y座標(m),精度(m),記録日時'];
+      points.forEach(function(p){
+        var ts = p.ts.toLocaleString('ja-JP');
+        var lat = p.lat.toFixed(7);
+        var lon = p.lon.toFixed(7);
+        var xy = latLonToPlaneRectangular(p.lat, p.lon, zone);
+        var acc = Math.round(p.acc);
+        var site = (siteNameInput.value || '').replace(/"/g, '""');
+        var label = String(p.label || '').replace(/"/g, '""');
+        rows.push(['"' + site + '"', '"' + label + '"', lat, lon, xy.x.toFixed(3), xy.y.toFixed(3), acc, ts].join(','));
+      });
+
+      var csv = '\uFEFF' + rows.join('\r\n');
+      var baseName = (siteNameInput.value || '立木位置記録').trim().replace(/[\\/:*?"<>|]/g, '_');
+      downloadFile(baseName + '_立木位置記録.csv', csv, 'text/csv;charset=utf-8;');
+      setStatus('CSVを書き出しました。');
+    });
+
+    document.getElementById('kmlBtn').addEventListener('click', function(){
+    if(points.length === 0){ setStatus('書き出す記録がありません。', true); return; }
+    var placemarks = points.map(function(p){
+      return '  <Placemark>\n' +
+             '    <name>' + escapeHtml(p.label) + '</name>\n' +
+             '    <Point><coordinates>' + p.lon + ',' + p.lat + ',0</coordinates></Point>\n' +
+             '  </Placemark>';
+    }).join('\n');
+    var siteName = escapeHtml(siteNameInput.value || '立木位置記録');
+    var kml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>' + siteName + '</name>\n' + placemarks + '\n</Document>\n</kml>';
+    var kmlBaseName = (siteNameInput.value || '立木位置記録').trim().replace(/[\\/:*?"<>|]/g, '_');
+    downloadFile(kmlBaseName + '_立木位置記録.kml', kml, 'application/vnd.google-earth.kml+xml');
+    setStatus('KMLを書き出しました。');
+  });
+
+
+  // KML読込：過去の立木位置を地図へ復元
+  var kmlImportBtn = document.getElementById('kmlImportBtn');
+  var kmlFileInput = document.getElementById('kmlFileInput');
+
+  kmlImportBtn.addEventListener('click', function(){
+    kmlFileInput.value = '';
+    kmlFileInput.click();
+  });
+
+  kmlFileInput.addEventListener('change', function(){
+    var file = kmlFileInput.files && kmlFileInput.files[0];
+    if(!file) return;
+
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        var xml = new DOMParser().parseFromString(e.target.result, 'application/xml');
+        if(xml.getElementsByTagName('parsererror').length) throw new Error('KML解析エラー');
+
+        var doc = xml.getElementsByTagName('Document')[0];
+        var docName = '';
+        if(doc){
+          var dn = doc.getElementsByTagName('name')[0];
+          if(dn) docName = (dn.textContent || '').trim();
+        }
+
+        var placemarks = Array.prototype.slice.call(xml.getElementsByTagName('Placemark'));
+        var imported = [];
+        placemarks.forEach(function(pm){
+          var nameNode = pm.getElementsByTagName('name')[0];
+          var coordNode = pm.getElementsByTagName('coordinates')[0];
+          if(!coordNode) return;
+          var parts = (coordNode.textContent || '').trim().split(/\\s+/)[0].split(',');
+          if(parts.length < 2) return;
+          var lon = Number(parts[0]), lat = Number(parts[1]);
+          if(!isFinite(lat) || !isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
+          imported.push({
+            label: nameNode ? (nameNode.textContent || '').trim() : '',
+            lat: lat, lon: lon, acc: 0, ts: new Date()
+          });
+        });
+
+        if(!imported.length){
+          setStatus('KML内に読み込める位置情報がありません。', true);
+          return;
+        }
+
+        // iPhone Safariでも確実に処理できるよう、確認後に追加
+        if(!window.confirm('KMLから ' + imported.length + '件を読み込みます。\
+現在の記録は残したまま追加します。')) return;
+
+        imported.forEach(function(p, idx){
+          if(!p.label) p.label = 'KML' + (idx + 1);
+          var marker = L.marker([p.lat, p.lon], {icon: makeIcon(p.label)}).addTo(map);
+          marker.bindPopup(escapeHtml(p.label) + '<br>' + p.lat.toFixed(7) + ', ' + p.lon.toFixed(7) + '<br>KML読込');
+          points.push({id: nextId++, label:p.label, lat:p.lat, lon:p.lon, acc:0, ts:p.ts, marker:marker});
+        });
+
+        if(docName){
+          siteNameInput.value = docName;
+          try{ localStorage.setItem('treeSurveySiteName', docName); }catch(e){}
+        }
+
+        var maxNum = 0, prefix = prefixInput.value || 'A';
+        imported.forEach(function(p){
+          var m = p.label.match(/^(.+?)(\\d+)$/);
+          if(m && m[1] === prefix) maxNum = Math.max(maxNum, Number(m[2]));
+        });
+        if(maxNum > 0){ numInput.value = String(maxNum + 1); updatePreview(); }
+
+        renderList();
+        savePoints();
+        var group = L.featureGroup(points.map(function(p){ return p.marker; }));
+        if(group.getBounds().isValid()) map.fitBounds(group.getBounds(), {padding:[30,30], maxZoom:19});
+        setStatus('KMLから ' + imported.length + '件を読み込みました。');
+      }catch(err){
+        console.error(err);
+        setStatus('KMLの読み込みに失敗しました。', true);
+      }
+    };
+    reader.onerror = function(){ setStatus('KMLファイルを読み込めませんでした。', true); };
+    reader.readAsText(file, 'UTF-8');
+  });
+
+  renderList();
+  updateListToggle();
+  setTimeout(function(){ map.invalidateSize(true); }, 500);
+})();
+</script>
+</body>
+</html>
